@@ -1,0 +1,45 @@
+# Build → Push → Deploy to Cloud Run (GPU)
+substitutions:
+  # Change these if you prefer another region/service/repo
+  _REGION: asia-southeast1
+  _REPO: audio-transcriber
+  _SERVICE: audio-transcriber
+
+images:
+  - '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/app:$SHORT_SHA'
+
+steps:
+  # Build the GPU-ready image from Dockerfile
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build', '-t',
+      '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/app:$SHORT_SHA',
+      '.'
+    ]
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'push',
+      '$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/app:$SHORT_SHA'
+    ]
+
+  # Deploy to Cloud Run with GPU (L4) and required env vars
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      [
+        'run','deploy','$_SERVICE',
+        '--image=$_REGION-docker.pkg.dev/$PROJECT_ID/$_REPO/app:$SHORT_SHA',
+        '--region=$_REGION',
+        '--gpu=1',
+        '--cpu=4',
+        '--memory=8Gi',
+        '--port=5000',
+        '--allow-unauthenticated',
+        # Set your runtime env vars (edit the values or move to secrets)
+        '--set-env-vars','FFMPEG_PATH=/usr/bin/ffmpeg',
+        '--set-env-vars','TASK_URL=https://your-erp.example.com/task-endpoint',
+        '--set-env-vars','GEMINI_API_KEY=REPLACE_WITH_YOUR_KEY',
+        '--set-env-vars','FLASK_API_KEY=optional'
+      ]
